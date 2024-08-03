@@ -9,39 +9,39 @@ import java.math.BigInteger
 
 @Repository
 class R2DBCPaymentRepository(
-        private val databaseClient: DatabaseClient,
-        private val transactionalOperator: TransactionalOperator,
-) : PaymentRepository{
+    private val databaseClient: DatabaseClient,
+    private val transactionalOperator: TransactionalOperator,
+) : PaymentRepository {
 
     override fun save(paymentEvent: PaymentEvent): Mono<Void> {
         return insertPaymentEvent(paymentEvent)
-                .flatMap { selectPaymentEventId() }
-                .flatMap {paymentEventId-> insertPyamentOrders(paymentEvent, paymentEventId) }
-                .`as`(transactionalOperator::transactional)
-                .then()
+            .flatMap { selectPaymentEventId() }
+            .flatMap { paymentEventId -> insertPaymentOrders(paymentEvent, paymentEventId) }
+            .`as`(transactionalOperator::transactional)
+            .then()
     }
 
-    private fun insertPyamentOrders(paymentEvent: PaymentEvent, paymentEventId: Long): Mono<Long> {
+    private fun insertPaymentOrders(paymentEvent: PaymentEvent, paymentEventId: Long): Mono<Long> {
         val valueClauses = paymentEvent.paymentOrders.joinToString(", ") { paymentOrder ->
             "($paymentEventId, ${paymentOrder.sellerId}, '${paymentOrder.orderId}', ${paymentOrder.paymentEventId}, ${paymentOrder.amount}, `${paymentOrder.paymentStatus}`)"
         }
         return databaseClient.sql(INSERT_PAYMENT_ORDER_QUERY(valueClauses))
-                .fetch()
-                .rowsUpdated()
+            .fetch()
+            .rowsUpdated()
     }
 
     private fun selectPaymentEventId() = databaseClient.sql(LSAT_INSERT_ID_QUERY)
-            .fetch()
-            .first()
-            .map { (it["LAST_INSERT_ID()"] as BigInteger).toLong() }
+        .fetch()
+        .first()
+        .map { (it["LAST_INSERT_ID()"] as BigInteger).toLong() }
 
-    private fun insertPaymentEvent(paymentEvent: PaymentEvent) : Mono<Long> {
+    private fun insertPaymentEvent(paymentEvent: PaymentEvent): Mono<Long> {
         return databaseClient.sql(INSERT_PAYMENT_EVENT_QUERY)
-                .bind("buyerId", paymentEvent.buyerId)
-                .bind("orderName", paymentEvent.orderName)
-                .bind("orderId", paymentEvent.orderId)
-                .fetch()
-                .rowsUpdated()
+            .bind("buyerId", paymentEvent.buyerId)
+            .bind("orderName", paymentEvent.orderName)
+            .bind("orderId", paymentEvent.orderId)
+            .fetch()
+            .rowsUpdated()
     }
 
     companion object {
@@ -54,7 +54,7 @@ class R2DBCPaymentRepository(
             SELECT LAST_INSERT_ID()
         """.trimIndent()
 
-        val INSERT_PAYMENT_ORDER_QUERY = fun (valueClauses: String) = """
+        val INSERT_PAYMENT_ORDER_QUERY = fun(valueClauses: String) = """
             INSERT INTO payment_orders (payment_event_id, seller_id, order_id, product_id, amount, payment_order_status)
             VALUES $valueClauses
         """.trimIndent()

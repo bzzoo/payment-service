@@ -1,9 +1,7 @@
 package com.app.paymentservice.payment.adapter.`in`.web.api
 
-
 import com.app.paymentservice.payment.adapter.`in`.web.reqeust.TossPaymentConfirmRequest
 import com.app.paymentservice.payment.adapter.`in`.web.response.ApiResponse
-import com.app.paymentservice.payment.adapter.out.web.toss.executor.TossPaymentExecutor
 import com.app.paymentservice.common.WebAdapter
 import com.app.paymentservice.payment.application.port.`in`.PaymentConfirmCommand
 import com.app.paymentservice.payment.application.port.`in`.PaymentConfirmUseCase

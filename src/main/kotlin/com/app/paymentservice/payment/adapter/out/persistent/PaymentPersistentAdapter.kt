@@ -3,6 +3,7 @@ package com.app.paymentservice.payment.adapter.out.persistent
 import com.app.paymentservice.common.PersistentAdapter
 import com.app.paymentservice.payment.adapter.out.persistent.repository.PaymentRepository
 import com.app.paymentservice.payment.adapter.out.persistent.repository.PaymentStatusUpdateRepository
+import com.app.paymentservice.payment.adapter.out.persistent.repository.PaymentValidationRepository
 import com.app.paymentservice.payment.application.port.out.PaymentStatusUpdateCommand
 import com.app.paymentservice.payment.application.port.out.PaymentStatusUpdatePort
 import com.app.paymentservice.payment.application.port.out.PaymentValidationPort
@@ -14,7 +15,7 @@ import reactor.core.publisher.Mono
 class PaymentPersistentAdapter(
         private val paymentRepository: PaymentRepository,
         private val paymentStatusUpdateRepository: PaymentStatusUpdateRepository,
-        private val paymentValidationPort: PaymentValidationPort,
+        private val paymentValidationRepository: PaymentValidationRepository,
 ) : SavePaymentPort, PaymentStatusUpdatePort, PaymentValidationPort {
 
     override fun save(paymentEvent: PaymentEvent): Mono<Void> {
@@ -30,6 +31,6 @@ class PaymentPersistentAdapter(
     }
 
     override fun isValid(orderId: String, amount: Long): Mono<Boolean> {
-        return  paymentValidationPort.isValid(orderId, amount)
+        return  paymentValidationRepository.isValid(orderId, amount)
     }
 }

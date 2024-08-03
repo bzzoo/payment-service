@@ -11,20 +11,20 @@ import reactor.core.publisher.Mono
 
 @Repository
 class R2DBCPaymentStatusUpdateRepository(
-        private val databaseClient: DatabaseClient,
-        private val transactionalOperator: TransactionalOperator,
+    private val databaseClient: DatabaseClient,
+    private val transactionalOperator: TransactionalOperator,
 ) : PaymentStatusUpdateRepository {
     override fun updatePaymentStatusToExecuting(orderId: String, paymentKey: String): Mono<Boolean> {
         return checkPreviousPaymentOrderStatus(orderId)
-                .flatMap { insertPaymentHistory(it, PaymentStatus.EXECUTING, "PAYMENT_CONFIRMATION_START") }
-                .flatMap { updatePaymentOrderStatus(orderId, PaymentStatus.EXECUTING)}
-                .flatMap { updatePaymentKey(orderId, paymentKey)}
-                .`as`(transactionalOperator::transactional)
-                .thenReturn(true)
+            .flatMap { insertPaymentHistory(it, PaymentStatus.EXECUTING, "PAYMENT_CONFIRMATION_START") }
+            .flatMap { updatePaymentOrderStatus(orderId, PaymentStatus.EXECUTING) }
+            .flatMap { updatePaymentKey(orderId, paymentKey) }
+            .`as`(transactionalOperator::transactional)
+            .thenReturn(true)
     }
 
     override fun updatePaymentStatus(command: PaymentStatusUpdateCommand): Mono<Boolean> {
-        return when(command.status){
+        return when (command.status) {
             PaymentStatus.SUCCESS -> updatePaymentStatusToSuccess(command)
             PaymentStatus.FAILURE -> updatePaymentStatusToFailure(command)
             PaymentStatus.UNKNOWN -> updatePaymentStatusToUnKnown(command)
@@ -33,17 +33,17 @@ class R2DBCPaymentStatusUpdateRepository(
     }
 
     private fun updatePaymentStatusToUnKnown(command: PaymentStatusUpdateCommand): Mono<Boolean> {
-       return selectPaymentOrderStatus(command.orderId)
-           .collectList()
-           .flatMap { insertPaymentHistory(it, command.status, "UNKNOWN") }
-           .flatMap { updatePaymentOrderStatus(command.orderId, command.status) }
-           .flatMap { incrementPaymentOrderFailedCount(command) }
-           .`as`(transactionalOperator::transactional)
-           .thenReturn(true)
+        return selectPaymentOrderStatus(command.orderId)
+            .collectList()
+            .flatMap { insertPaymentHistory(it, command.status, "UNKNOWN") }
+            .flatMap { updatePaymentOrderStatus(command.orderId, command.status) }
+            .flatMap { incrementPaymentOrderFailedCount(command) }
+            .`as`(transactionalOperator::transactional)
+            .thenReturn(true)
 
     }
 
-    private fun incrementPaymentOrderFailedCount(command: PaymentStatusUpdateCommand): Mono<Long>{
+    private fun incrementPaymentOrderFailedCount(command: PaymentStatusUpdateCommand): Mono<Long> {
         return databaseClient.sql(INCREMENT_PAYMENT_ORDER_FAILED_COUNT_QUERY)
             .bind("orderId", command.orderId)
             .fetch()
@@ -82,21 +82,25 @@ class R2DBCPaymentStatusUpdateRepository(
 
     private fun updatePaymentKey(orderId: String, paymentKey: String): Mono<Long> {
         return databaseClient.sql(UPDATE_PAYMENT_KEY_QUERY)
-                .bind("orderId", orderId)
-                .bind("paymentKey", paymentKey)
-                .fetch()
-                .rowsUpdated()
+            .bind("orderId", orderId)
+            .bind("paymentKey", paymentKey)
+            .fetch()
+            .rowsUpdated()
     }
 
     private fun updatePaymentOrderStatus(orderId: String, status: PaymentStatus): Mono<Long> {
         return databaseClient.sql(UPDATE_PAYMENT_ORDER_STATUS_QUERY)
-                .bind("orderId", orderId)
-                .bind("status", status)
-                .fetch()
-                .rowsUpdated()
+            .bind("orderId", orderId)
+            .bind("status", status)
+            .fetch()
+            .rowsUpdated()
     }
 
-    private fun insertPaymentHistory(paymentOrderIdToStatus: List<Pair<Long, String>>, status: PaymentStatus, reason: String): Mono<Long> {
+    private fun insertPaymentHistory(
+        paymentOrderIdToStatus: List<Pair<Long, String>>,
+        status: PaymentStatus,
+        reason: String
+    ): Mono<Long> {
         if (paymentOrderIdToStatus.isEmpty()) return Mono.empty()
 
         val valueClauses = paymentOrderIdToStatus.joinToString(", ") {
@@ -104,36 +108,46 @@ class R2DBCPaymentStatusUpdateRepository(
         }
 
         return databaseClient.sql(INSERT_PAYMENT_HISTORY_QUERY(valueClauses))
-                .fetch()
-                .rowsUpdated()
+            .fetch()
+            .rowsUpdated()
     }
 
     private fun checkPreviousPaymentOrderStatus(orderId: String): Mono<List<Pair<Long, String>>> {
         return selectPaymentOrderStatus(orderId)
-                .handle { paymentOrder, sink ->
-                    when (paymentOrder.second) {
-                        PaymentStatus.NOT_STARTED.name, PaymentStatus.UNKNOWN.name, PaymentStatus.EXECUTING.name -> {
-                            sink.next(paymentOrder)
-                        }
+            .handle { paymentOrder, sink ->
+                when (paymentOrder.second) {
+                    PaymentStatus.NOT_STARTED.name, PaymentStatus.UNKNOWN.name, PaymentStatus.EXECUTING.name -> {
+                        sink.next(paymentOrder)
+                    }
 
-                        PaymentStatus.SUCCESS.name -> {
-                            sink.error(PaymentAlreadyProcessedException(message = "이미 처리 성공한 결제 입니다.", status = PaymentStatus.SUCCESS))
-                        }
+                    PaymentStatus.SUCCESS.name -> {
+                        sink.error(
+                            PaymentAlreadyProcessedException(
+                                message = "이미 처리 성공한 결제 입니다.",
+                                status = PaymentStatus.SUCCESS
+                            )
+                        )
+                    }
 
-                        PaymentStatus.FAILURE.name -> {
-                            sink.error(PaymentAlreadyProcessedException(message = "이미 처리 실패한 결제 입니다.", status = PaymentStatus.FAILURE))
-                        }
+                    PaymentStatus.FAILURE.name -> {
+                        sink.error(
+                            PaymentAlreadyProcessedException(
+                                message = "이미 처리 실패한 결제 입니다.",
+                                status = PaymentStatus.FAILURE
+                            )
+                        )
                     }
                 }
-                .collectList()
+            }
+            .collectList()
     }
 
     private fun selectPaymentOrderStatus(orderId: String): Flux<Pair<Long, String>> {
         return databaseClient.sql(SELECT_PAYMENT_ORDER_STATUS_QUERY)
-                .bind("orderId", orderId)
-                .fetch()
-                .all()
-                .map { Pair(it["id"] as Long, it["payment_oder_status"] as String) }
+            .bind("orderId", orderId)
+            .fetch()
+            .all()
+            .map { Pair(it["id"] as Long, it["payment_oder_status"] as String) }
     }
 
     companion object {
